@@ -20,15 +20,6 @@
   [& args]
   (.getPath (apply io/file args)))
 
-(defn write-to-file [out-file content]
-  (doto out-file
-    io/make-parents
-    (spit content)))
-
-(defn create-file [tmp filepath content]
-  (let [file (io/file tmp filepath)]
-    (write-to-file file content)))
-
 (defn parent-path [filepath filename-with-extension]
   (if (.endsWith filepath filename-with-extension)
     (.substring filepath 0 (- (count filepath)
@@ -51,17 +42,10 @@
      :parent-path    (parent-path tmp-path filename)
      :extension      (extension filename)}))
 
-;; Instead of making a massive configuration object,
-;; Users should just have multiple runs of the graphicsmagick task within their boot process
-;; in order to get composing effects!
-;;                                  regex          "string"        arbitrary nested maps of key:val
-;; e.g. (graphicsmagick {:pattern "*.png" :command "convert" :args "jpeg"})
-;;      (graphicsmagick {:pattern "*.png" :command "watermark" :args {:source "watermark.png"})
 (def ^:private +graphicsmagick-defaults+
   {:extensions #{"jpeg" "jpg" "png"}
    :patterns #{#"\.*"}
-   :gm "/usr/local/bin/gm"
-   })
+   :gm "/usr/local/bin/gm"})
 
 ;; TODO: do we specify a target folder so we don't overwrite the original images???
 ;; TODO: what is the best practice for writing to a target?
@@ -78,7 +62,8 @@
    g gm         EXECUTABLE str "The location of the graphicsmagick executable."]
   (let [options (merge +graphicsmagick-defaults+ *opts*)
         gm-exec (io/as-file (:gm options))
-        tmp (boot/tmp-dir!)]
+        tmp (boot/tmp-dir!)
+        tmp-path (.getPath tmp)]
     (cond (not (:command options))
           (util/fail "The -c/--command option is required!")
           (not (:args options))
@@ -89,36 +74,37 @@
           (boot/with-pre-wrap fileset
             (let [image-files (->>
                                fileset
-                               boot/user-files
+                               boot/input-files
                                (boot/by-ext (:extensions options))
                                (boot/by-re (:patterns options))
                                (map add-filedata))]
-              (cond (empty? image-files)
-                    (do
-                      (util/info "No images found to process.")
-                      fileset)
-                    :else
-                    (do
-                      (doseq [image-file image-files]
-                        (println image-file)
-                        (let [tmp-path (.getPath tmp)
-                              image-file-path (:full-path image-file)
-                              target-file-directory (create-filepath tmp-path (:parent-path image-file))
-                              target-directory-created (.mkdir (java.io.File. target-file-directory))
-                              target-file-path (create-filepath tmp-path (:path image-file))
-                              cmd-vec (vec (concat [(.getPath gm-exec)
-                                                    (:command options)
-                                                    (:full-path image-file)]
-                                                   (vec (string/split (:args options) #" "))
-                                                   [target-file-path]))
-                              cmd-result @(exec/sh cmd-vec {:dir tmp-path})
-                              exitcode    (:exit cmd-result)
-                              errormsg    (:err cmd-result)]
-                          (assert
-                            (= 0 exitcode)
-                            (util/info (string/join "\n" ["Graphicsmagick failed:"
-                                                          errormsg
-                                                          "Command:"
-                                                          (string/join " " cmd-vec)])))
-                          ))
-                      (commit fileset tmp))))))))
+              (if (empty? image-files)
+                (do (util/info "No images found to process.") fileset)
+                (doseq [image-file image-files]
+                  (let [image-file-path (:full-path image-file)
+                        target-file-directory (create-filepath tmp-path (:parent-path image-file))
+                        target-directory-created (.mkdir (java.io.File. target-file-directory))
+                        target-file-path (create-filepath tmp-path (:path image-file))
+                        cmd-vec (vec
+                                 (concat [(.getPath gm-exec)
+                                          (:command options)
+                                          (:full-path image-file)]
+                                         (vec (string/split (:args options) #" "))
+                                         [target-file-path]))
+                        cmd-result @(exec/sh cmd-vec {:dir tmp-path})
+                        exitcode    (:exit cmd-result)
+                        errormsg    (:err cmd-result)]
+                    (assert
+                     (= 0 exitcode)
+                     (util/info (string/join "\n" ["Graphicsmagick failed:"
+                                                   errormsg
+                                                   "Command:"
+                                                   (string/join " " cmd-vec)])))
+                    )))
+                  (commit fileset tmp))))))
+
+(boot/boot
+ (comp
+  (graphicsmagick :command "convert" :args "-resize 800x800")
+  (graphicsmagick :command "convert" :args "-compress JPEG -quality 50")
+  (boot.task.built-in/target)))

@@ -20,8 +20,8 @@
        :description    "Boot task for transforming graphicss with Graphicsmagick"
        :url            "https://github.com/coreygrunewald/boot-graphicsmagick"
        :scm            {:url "https://github.com/coreygrunewald/boot-graphicsmagick"}
-       :license        {"name""Eclipse Public License"
-                        "url" "http://www.eclipse.org/legal/epl-v10.html"}})
+       :license        {"Eclipse Public License"
+                        "http://www.eclipse.org/legal/epl-v10.html"}})
 
 (deftask install-locally
   "Install locally"
