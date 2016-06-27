@@ -12,21 +12,21 @@
       (boot/add-resource tmp)
       boot/commit!))
 
-(defn ^String extension [name]
+(defn- ^String extension [name]
   (last (seq (string/split name #"\."))))
 
-(defn create-filepath
+(defn- create-filepath
   "Creates a filepath using system path separator."
   [& args]
   (.getPath (apply io/file args)))
 
-(defn parent-path [filepath filename-with-extension]
+(defn- parent-path [filepath filename-with-extension]
   (if (.endsWith filepath filename-with-extension)
     (.substring filepath 0 (- (count filepath)
                               (count filename-with-extension)))
     filepath))
 
-(defn add-filedata [f]
+(defn- add-filedata [f]
   (let [tmpfile   (boot/tmp-file f)
         full-path (.getPath tmpfile)
         filename  (.getName tmpfile)
@@ -55,7 +55,7 @@
    p patterns   PATTERNS   #{regex} "Patterns to match filenames."
    c command    COMMAND    str "The graphicsmagick command to execute."
    a args       ARGS       str  "The arguments for the graphickmagick command."
-   o output-dir OUTPUTDIR  str "The directory to place processed images." ;; TODO: i don't think we need this!
+   ;; o output-dir OUTPUTDIR  str "The directory to place processed images." ;; TODO: i don't think we need this!
    ;; unless we want to target putting all the images in a specific directory!
    ;; the target directory should take care of output!
    ;; TODO: we should offer a filename transform e.g. basset.png => basset@2x.png
@@ -83,7 +83,7 @@
                 (doseq [image-file image-files]
                   (let [image-file-path (:full-path image-file)
                         target-file-directory (create-filepath tmp-path (:parent-path image-file))
-                        target-directory-created (.mkdir (java.io.File. target-file-directory))
+                        target-directory-created (.mkdirs (java.io.File. target-file-directory))
                         target-file-path (create-filepath tmp-path (:path image-file))
                         cmd-vec (vec
                                  (concat [(.getPath gm-exec)
@@ -102,9 +102,3 @@
                                                    (string/join " " cmd-vec)])))
                     )))
                   (commit fileset tmp))))))
-
-(boot/boot
- (comp
-  (graphicsmagick :command "convert" :args "-resize 800x800")
-  (graphicsmagick :command "convert" :args "-compress JPEG -quality 50")
-  (boot.task.built-in/target)))
